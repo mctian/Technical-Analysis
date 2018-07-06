@@ -11,6 +11,9 @@ from sklearn.preprocessing import minmax_scale
 from sklearn.model_selection import GridSearchCV
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.model_selection import KFold
+from sklearn.neighbors import KNeighborsRegressor
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.metrics import accuracy_score 
 
 
 def loadTestData(filename):
@@ -147,14 +150,42 @@ def optIMFPrediction():
 
 
 if __name__ == '__main__':
-    df = loadTestData('table_bac.csv')
-    plt.plot(df[5].values[:])
-    plt.plot(df[4].values[:])
-    plt.plot(df[3].values[:])
+    df = loadTestData('table_aapl.csv')
+    #plt.plot(df[5].values[:])
+    #plt.plot(df[4].values[:])
+    #plt.plot(df[3].values[:])
     close_prices = df[5].values[:]
     low_prices = df[4].values[:]
     high_prices = df[3].values[:]
-    encodings = np.array([longShortEncoding(i, close_prices, high_prices, low_prices, 100, 0.25) for i in range(3000)])
+    encodings = np.array([longShortEncoding(i, close_prices, high_prices, low_prices, 5, 0.05) for i in range(3600)])
 
     weights = sampleWeightsByUniqueness(encodings) 
     print(weights)
+    print(encodings[:,0])
+    print(encodings.shape)
+
+    s = minmax_scale(close_prices)
+    emd = EMD(s, maxiter = 3000)
+    imf = emd.decompose()
+
+    plot_imfs(s, imf)
+
+    predYVals = []
+    for i in range(7, imf.shape[0]):
+        x,y = rollingWindows(imf[i], 30, 0, 3000)
+        nn = KNeighborsRegressor(n_neighbors = 4)
+        nn.fit(x,y)
+        x,y = rollingWindows(imf[i], 30, 3030, 3400)
+        predYNN = nn.predict(x)
+        print(y)
+        print(predYNN)
+        predYVals.append(predYNN)
+
+    clf2 = KNeighborsClassifier(n_neighbors = 2)
+    clf2.fit(np.matrix([imf[i][0:3000] for i in range(7, imf.shape[0])]).T, encodings[0:3000, 0])
+    val = np.matrix(predYVals).T
+    
+    predictions_nn = clf2.predict(val)
+    print(predictions_nn)
+    print(encodings[3030:3400, 0])
+    print(accuracy_score(encodings[3030:3400, 0], predictions_nn))
